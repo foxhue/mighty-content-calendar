@@ -149,6 +149,13 @@ background: var(--bg); }
   .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
   .empty-icon { font-size: 32px; margin-bottom: 12px; }
 
+  /* Editable fields in day view */
+  .day-edit-select { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; outline: none; transition: border-color 0.15s; }
+  .day-edit-select:hover, .day-edit-select:focus { border-color: var(--foxhue); }
+  .day-edit-input { font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); width: 100%; outline: none; transition: border-color 0.15s; }
+  .day-edit-input:hover, .day-edit-input:focus { border-color: var(--foxhue); }
+  .day-edit-input::placeholder { color: var(--muted); font-style: italic; font-weight: 400; }
+
   /* Loading overlay */
   .loading-overlay { position: fixed; inset: 0; background: rgba(247,246,242,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; gap: 12px; }
   .loading-spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--foxhue); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -246,6 +253,7 @@ const sb = {
 // BASE CALENDAR DATA
 // ============================================================
 const PLATFORMS = ['LinkedIn', 'Google', 'Reddit', 'YouTube', 'X', 'Facebook', 'Instagram'];
+const CONTENT_TYPES = ['Blog', 'Partner Blog', 'Mighty Selects', 'Customer Spotlight', 'Video', 'Image/Carousel'];
 
 const calendarData = {
   '2026-03': [
@@ -310,7 +318,9 @@ async function loadFromSupabase() {
         return {
           ...item,
           approved: remote.approved !== undefined ? remote.approved : item.approved,
-          platforms: { ...item.platforms, ...(remote.platforms || {}) }
+          platforms: { ...item.platforms, ...(remote.platforms || {}) },
+          type: remote.type || item.type,
+          title: remote.title || item.title
         };
       }
       return item;
@@ -356,9 +366,11 @@ setInterval(async () => {
       if (remote) {
         const newApproved = remote.approved !== undefined ? remote.approved : item.approved;
         const newPlatforms = { ...item.platforms, ...(remote.platforms || {}) };
-        if (newApproved !== item.approved || JSON.stringify(newPlatforms) !== JSON.stringify(item.platforms)) {
+        const newType = remote.type || item.type;
+        const newTitle = remote.title || item.title;
+        if (newApproved !== item.approved || JSON.stringify(newPlatforms) !== JSON.stringify(item.platforms) || newType !== item.type || newTitle !== item.title) {
           changed = true;
-          return { ...item, approved: newApproved, platforms: newPlatforms };
+          return { ...item, approved: newApproved, platforms: newPlatforms, type: newType, title: newTitle };
         }
       }
       return item;
@@ -504,8 +516,14 @@ function renderDayView() {
         <div style="display:flex;gap:8px;align-items:center"><span class="owner-badge ${getOwnerClass(item.owner)}">${item.owner}</span><span class="status-pill ${getStatusClass(item)}">${getStatusLabel(item)}</span></div>
       </div>
       <div class="day-content">
-        <div class="day-detail-row"><div class="day-detail-label">Type</div><div class="day-detail-value" style="color:${getTypeColor(item.type)};font-weight:600">${item.type}</div></div>
-        <div class="day-detail-row"><div class="day-detail-label">Title</div><div class="day-detail-value" style="font-size:15px;font-weight:600;letter-spacing:-0.2px">${item.title}</div></div>
+        <div class="day-detail-row"><div class="day-detail-label">Type</div><div class="day-detail-value">
+          <select class="day-edit-select" style="color:${getTypeColor(item.type)}" onchange="updateType('${item.date}', this.value)">
+            ${CONTENT_TYPES.map(t => `<option value="${t}" ${t===item.type?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div></div>
+        <div class="day-detail-row"><div class="day-detail-label">Title</div><div class="day-detail-value">
+          <input class="day-edit-input" value="${item.title.replace(/"/g,'&quot;')}" placeholder="Enter title…" onblur="updateTitle('${item.date}', this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+        </div></div>
         ${item.approved !== null ? `<div style="margin-top:16px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);margin-bottom:10px">Platform Publishing</div><div class="day-platforms">${plats}</div></div>` : ''}
         ${approveSection}
       </div>
@@ -523,6 +541,22 @@ async function toggleApproval(date) {
   item.approved = !item.approved;
   render();
   await saveToSupabase(date);
+}
+
+async function updateType(date, newType) {
+  const item = data.find(i => i.date === date);
+  if (!item || item.type === newType) return;
+  item.type = newType;
+  render();
+  await saveToSupabase(date, { type: newType });
+}
+
+async function updateTitle(date, newTitle) {
+  const item = data.find(i => i.date === date);
+  if (!item || item.title === newTitle) return;
+  item.title = newTitle;
+  render();
+  await saveToSupabase(date, { title: newTitle });
 }
 
 async function togglePlatform(date, platform) {
