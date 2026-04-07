@@ -20,7 +20,9 @@ export function getCalendarCSS(config: WorkspaceConfig): string {
     --radius: 10px; --radius-sm: 6px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+  html, body { height: 100vh; overflow: hidden; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+  .calendar-app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
   .header { background: var(--text); color: white; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
   .header-left { display: flex; align-items: center; gap: 16px; }
@@ -38,45 +40,66 @@ export function getCalendarCSS(config: WorkspaceConfig): string {
   .sync-dot.error { background: #EF4444; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-  .controls { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  .controls-left { display: flex; align-items: center; gap: 8px; }
-  .month-nav { display: flex; align-items: center; gap: 8px; }
-  .month-btn { width: 32px; height: 32px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--muted); transition: all 0.15s; }
-  .month-btn:hover { border-color: var(--text); color: var(--text); }
-  .month-label { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; min-width: 120px; text-align: center; }
-  .view-tabs { display: flex; background: var(--bg); border-radius: var(--radius-sm); padding: 3px; gap: 2px; }
-  .view-tab { padding: 6px 14px; border: none; background: transparent; border-radius: 5px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; color: var(--muted); transition: all 0.15s; }
-  .view-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-  .filter-bar { display: flex; align-items: center; gap: 8px; }
+  .controls { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .controls-left { display: flex; align-items: center; gap: 16px; }
+  .month-nav { display: flex; align-items: center; gap: 4px; }
+  .month-btn { width: 28px; height: 28px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--muted); transition: all 0.15s; font-size: 16px; }
+  .month-btn:hover { border-color: var(--text); color: var(--text); background: var(--bg); }
+  .month-label { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; min-width: 160px; text-align: center; }
+  .today-btn { padding: 5px 14px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; color: var(--text); transition: all 0.15s; }
+  .today-btn:hover { background: var(--text); color: var(--surface); border-color: var(--text); }
+  .view-tabs { display: flex; background: var(--bg); border-radius: 8px; padding: 3px; gap: 2px; }
+  .view-tab { padding: 6px 16px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
+  .view-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .controls-right { display: flex; align-items: center; gap: 12px; }
+  .filter-bar { display: flex; align-items: center; gap: 6px; }
   .filter-chip { padding: 5px 12px; border: 1px solid var(--border); background: var(--surface); border-radius: 20px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--muted); transition: all 0.15s; }
+  .filter-chip:hover { border-color: var(--text); color: var(--text); }
   .filter-chip.active { background: var(--text); border-color: var(--text); color: white; }
 
-  .stats-bar { padding: 16px 32px; display: flex; gap: 12px; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 18px; display: flex; flex-direction: column; gap: 2px; min-width: 120px; }
-  .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
-  .stat-label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stats-bar { padding: 10px 32px; display: flex; gap: 8px; align-items: center; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; }
+  .stat-value { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+  .stat-label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.4px; }
   .stat-card.approved .stat-value { color: var(--approved); }
   .stat-card.pending .stat-value { color: var(--pending); }
   ${config.owners.map(o => `.stat-card.${o.key} .stat-value { color: var(--${o.key}); }`).join('\n  ')}
 
-  .main { padding: 0 32px 32px; }
+  .main { padding: 0 32px 16px; flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 
   /* MONTH VIEW */
-  .month-view { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  .month-grid-header { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 2px solid var(--border); }
-  .day-header { padding: 10px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); border-right: 1px solid var(--border); }
-  .day-header:last-child { border-right: none; }
-  .month-weeks { display: flex; flex-direction: column; }
-  .month-week { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid var(--border); }
+  .month-view { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .month-grid-header { display: grid; grid-template-columns: repeat(5, 1fr) 0.7fr 0.7fr; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .day-header { padding: 10px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
+  .day-header.weekend { opacity: 0.5; }
+  .month-weeks { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+  .month-week { display: grid; grid-template-columns: repeat(5, 1fr) 0.7fr 0.7fr; border-bottom: 1px solid var(--border); flex: 1; min-height: 0; overflow: hidden; }
   .month-week:last-child { border-bottom: none; }
-  .month-cell { padding: 10px 12px; border-right: 1px solid var(--border); min-height: 90px; cursor: pointer; transition: background 0.1s; position: relative; }
+  .month-cell { padding: 8px 10px; cursor: pointer; transition: all 0.12s; position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; border-right: 1px solid var(--border); overflow: hidden; min-height: 0; min-width: 0; }
   .month-cell:last-child { border-right: none; }
   .month-cell:hover { background: var(--bg); }
-  .cell-date { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
-  .cell-pill { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; margin-bottom: 4px; cursor: pointer; transition: opacity 0.1s; line-height: 1.3; }
-  .cell-pill:hover { opacity: 0.8; }
-  ${config.owners.map(o => `.cell-pill.${o.key} { background: var(--${o.key}-light); color: var(--${o.key}); border: 1px solid var(--${o.key}-mid); }`).join('\n  ')}
-  .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .month-cell:hover .month-add { opacity: 1; }
+  .month-cell.empty { cursor: default; background: var(--bg); opacity: 0.4; }
+  .month-cell.empty:hover { background: var(--bg); }
+  .month-cell.weekend { background: linear-gradient(135deg, var(--surface) 0%, var(--bg) 100%); }
+  .month-cell.weekend .month-date { opacity: 0.5; }
+  .month-cell.today { background: rgba(5,150,105,0.04); }
+  .month-cell.selected { box-shadow: inset 0 0 0 2px var(--text); }
+
+  .month-date { font-size: 13px; font-weight: 500; color: var(--muted); line-height: 1; font-family: 'DM Mono', monospace; }
+  .month-date.today { color: white; background: var(--text); width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+
+  .month-count { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: white; margin: auto; font-family: 'DM Mono', monospace; transition: transform 0.15s; }
+  .month-cell:hover .month-count { transform: scale(1.1); }
+  .month-count.approved { background: var(--approved); }
+  .month-count.pending { background: var(--pending); }
+  .month-count.changes { background: #EF4444; }
+  .month-count.draft { background: var(--draft); }
+
+  .month-add { font-size: 18px; color: var(--border); opacity: 0; transition: opacity 0.15s; margin: auto; font-weight: 300; }
+  .month-cell:hover .month-add { opacity: 1; }
+  .month-cell.has-items .month-add { display: none; }
+
   .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-left: 4px; flex-shrink: 0; }
   .status-dot.approved { background: var(--approved); }
   .status-dot.pending, .status-dot.pending_review { background: var(--pending); }

@@ -223,34 +223,85 @@ export function initCalendar(
     }
   }
 
-  // Month view
+  // Generate all days for the current month (Mon–Sun)
+  function getMonthDays(): Array<{ date: string; day: string; week: string }> {
+    const [y, m] = state.currentMonth.split('-').map(Number);
+    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const result: Array<{ date: string; day: string; week: string }> = [];
+    const daysInMonth = new Date(y, m, 0).getDate();
+    let weekNum = 1;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(y, m - 1, d);
+      const dow = dt.getDay();
+      if (dow === 1 && result.length > 0) weekNum++;
+      result.push({
+        date: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+        day: dayNames[dow],
+        week: `W${weekNum}`,
+      });
+    }
+    return result;
+  }
+
+  // Month view — editorial calendar grid with status bars
   function renderMonthView() {
-    const weeks = getWeeks();
     const fd = filteredData();
-    const fdSet = new Set(fd.map(i => itemId(i)));
-    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
-    let html = `<div class="month-view"><div class="month-grid-header">${days.map(d => `<div class="day-header">${d}</div>`).join('')}</div><div class="month-weeks">`;
-    Object.entries(weeks).forEach(([wk, items]) => {
+    const allDays = getMonthDays();
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    // Group by week (Mon–Sun)
+    const weekMap: Record<string, typeof allDays> = {};
+    allDays.forEach(d => {
+      if (!weekMap[d.week]) weekMap[d.week] = [];
+      weekMap[d.week].push(d);
+    });
+
+    let html = `<div class="month-view"><div class="month-grid-header">${
+      days.map(d => `<div class="day-header${d === 'Saturday' || d === 'Sunday' ? ' weekend' : ''}">${d.slice(0, 3)}</div>`).join('')
+    }</div><div class="month-weeks">`;
+
+    Object.entries(weekMap).forEach(([, weekDays]) => {
       html += `<div class="month-week">`;
-      days.forEach(day => {
-        const dayItems = items.filter(i => i.day === day && fdSet.has(itemId(i)));
-        if (!dayItems.length) { html += `<div class="month-cell"></div>`; return; }
-        const date = dayItems[0].date;
-        const pillsHtml = dayItems.map(item => {
-          const sc = getStatusClass(item);
-          const short = item.title.length > 40 ? item.title.slice(0, 38) + '…' : item.title;
-          return `<div class="cell-pill ${getOwnerClass(config, item.owner)}" title="${esc(item.title)}">
-            <div class="pill-dot"></div>
-            <span style="flex:1;min-width:0">
-              <span style="font-size:9px;font-weight:600;opacity:0.6;text-transform:uppercase;letter-spacing:0.4px;display:block">${esc(item.type)}</span>
-              <span ${item.title === 'TBC' ? 'style="font-style:italic;opacity:0.6"' : ''}>${esc(short)}</span>
-            </span>
-            <div class="status-dot ${sc}"></div>
-          </div>`;
-        }).join('');
-        html += `<div class="month-cell" data-action="showDay" data-date="${date}">
-          <div class="cell-date"><span>${formatDate(date)}</span><span style="font-size:9px;color:var(--muted)">${wk}</span></div>
-          ${pillsHtml}
+      days.forEach(dayName => {
+        const dayInfo = weekDays.find(d => d.day === dayName);
+        const isWeekend = dayName === 'Saturday' || dayName === 'Sunday';
+
+        if (!dayInfo) {
+          html += `<div class="month-cell empty${isWeekend ? ' weekend' : ''}"></div>`;
+          return;
+        }
+
+        const dayItems = fd.filter(i => i.date === dayInfo.date);
+        const count = dayItems.length;
+        const isToday = dayInfo.date === todayStr;
+        const isSelected = dayInfo.date === state.selectedDay;
+        const dateNum = new Date(dayInfo.date + 'T00:00:00').getDate();
+
+        const classes = [
+          'month-cell',
+          isWeekend ? 'weekend' : '',
+          isToday ? 'today' : '',
+          isSelected ? 'selected' : '',
+          count > 0 ? 'has-items' : '',
+        ].filter(Boolean).join(' ');
+
+        // Pick circle color based on dominant status
+        let circleClass = '';
+        if (count > 0) {
+          const approved = dayItems.filter(i => i.status === 'approved').length;
+          const changes = dayItems.filter(i => i.status === 'changes_requested').length;
+          const pending = dayItems.filter(i => i.status === 'pending_review').length;
+          if (changes > 0) circleClass = 'changes';
+          else if (approved === count) circleClass = 'approved';
+          else if (pending > 0) circleClass = 'pending';
+          else circleClass = 'draft';
+        }
+
+        html += `<div class="${classes}" data-action="showDay" data-date="${dayInfo.date}">
+          <span class="month-date${isToday ? ' today' : ''}">${dateNum}</span>
+          ${count > 0 ? `<span class="month-count ${circleClass}">${count}</span>` : ''}
+          <span class="month-add">+</span>
         </div>`;
       });
       html += `</div>`;
@@ -262,30 +313,55 @@ export function initCalendar(
 
   // Week view
   function renderWeekView() {
-    const weeks = getWeeks();
+    const allDays = getMonthDays();
     const fdIds = new Set(filteredData().map(i => itemId(i)));
+
+    // Group all calendar days by week
+    const weekMap: Record<string, typeof allDays> = {};
+    allDays.forEach(d => {
+      if (!weekMap[d.week]) weekMap[d.week] = [];
+      weekMap[d.week].push(d);
+    });
+
     let html = `<div class="week-view">`;
-    Object.entries(weeks).forEach(([wk, items]) => {
-      const sorted = items.sort((a, b) => getDayOrder(a.day) - getDayOrder(b.day) || a.slot - b.slot).filter(i => fdIds.has(itemId(i)));
-      if (!sorted.length) return;
-      const dates = sorted.map(i => formatDate(i.date));
+    Object.entries(weekMap).forEach(([wk, weekDays]) => {
+      const firstDate = formatDate(weekDays[0].date);
+      const lastDate = formatDate(weekDays[weekDays.length - 1].date);
+
       html += `<div class="week-section">
-        <div class="week-header"><span class="week-badge">${wk}</span><span class="week-dates">${dates[0]} – ${dates[dates.length - 1]}</span></div>
+        <div class="week-header"><span class="week-badge">${wk}</span><span class="week-dates">${firstDate} – ${lastDate}</span></div>
         <div class="week-grid-header"><div>Day</div><div>Date</div><div>Content</div><div>Status</div><div>Platforms</div></div>`;
-      sorted.forEach(item => {
-        const plats = config.platforms.map(p => `<div class="platform-dot ${item.platforms[p] ? 'posted' : ''}" data-action="togglePlatform" data-date="${item.date}" data-slot="${item.slot}" data-platform="${p}" title="${p}">${p[0]}</div>`).join('');
-        const captionPreview = item.caption ? `<div class="caption-preview">${esc(item.caption.length > 60 ? item.caption.slice(0, 58) + '…' : item.caption)}</div>` : '';
-        html += `<div class="week-row" data-action="showDay" data-date="${item.date}">
-          <div class="week-cell"><div><div class="week-day-name">${item.day}</div><div style="margin-top:2px"><span class="owner-badge ${getOwnerClass(config, item.owner)}">${item.owner}</span></div></div></div>
-          <div class="week-cell"><span class="week-date-val">${formatDate(item.date)}</span></div>
-          <div class="week-cell" style="flex-direction:column;align-items:flex-start;gap:3px">
-            <span class="type-tag" style="color:${getTypeColor(config, item.type)};border:1px solid ${getTypeColor(config, item.type)}20;background:${getTypeColor(config, item.type)}10">${esc(item.type)}</span>
-            <div class="content-title ${item.title === 'TBC' ? 'tbc' : ''}">${esc(item.title)}</div>
-            ${captionPreview}
-          </div>
-          <div class="week-cell"><span class="status-pill ${getStatusClass(item)}">${getStatusLabel(item)}</span></div>
-          <div class="week-cell"><div class="platforms-cell">${plats}</div></div>
-        </div>`;
+
+      weekDays.forEach(dayInfo => {
+        const dayItems = state.data.filter(i => i.date === dayInfo.date && fdIds.has(itemId(i)))
+          .sort((a, b) => a.slot - b.slot);
+
+        if (dayItems.length) {
+          dayItems.forEach(item => {
+            const plats = config.platforms.map(p => `<div class="platform-dot ${item.platforms[p] ? 'posted' : ''}" data-action="togglePlatform" data-date="${item.date}" data-slot="${item.slot}" data-platform="${p}" title="${p}">${p[0]}</div>`).join('');
+            const captionPreview = item.caption ? `<div class="caption-preview">${esc(item.caption.length > 60 ? item.caption.slice(0, 58) + '…' : item.caption)}</div>` : '';
+            html += `<div class="week-row" data-action="showDay" data-date="${item.date}">
+              <div class="week-cell"><div><div class="week-day-name">${item.day}</div><div style="margin-top:2px"><span class="owner-badge ${getOwnerClass(config, item.owner)}">${item.owner}</span></div></div></div>
+              <div class="week-cell"><span class="week-date-val">${formatDate(item.date)}</span></div>
+              <div class="week-cell" style="flex-direction:column;align-items:flex-start;gap:3px">
+                <span class="type-tag" style="color:${getTypeColor(config, item.type)};border:1px solid ${getTypeColor(config, item.type)}20;background:${getTypeColor(config, item.type)}10">${esc(item.type)}</span>
+                <div class="content-title ${item.title === 'TBC' ? 'tbc' : ''}">${esc(item.title)}</div>
+                ${captionPreview}
+              </div>
+              <div class="week-cell"><span class="status-pill ${getStatusClass(item)}">${getStatusLabel(item)}</span></div>
+              <div class="week-cell"><div class="platforms-cell">${plats}</div></div>
+            </div>`;
+          });
+        } else {
+          // Empty day row — clickable to add content
+          html += `<div class="week-row" data-action="showDay" data-date="${dayInfo.date}" style="opacity:0.5">
+            <div class="week-cell"><div class="week-day-name">${dayInfo.day}</div></div>
+            <div class="week-cell"><span class="week-date-val">${formatDate(dayInfo.date)}</span></div>
+            <div class="week-cell" style="color:var(--muted);font-style:italic;font-size:12px">No content — click to add</div>
+            <div class="week-cell"></div>
+            <div class="week-cell"></div>
+          </div>`;
+        }
       });
       html += `</div>`;
     });
@@ -296,15 +372,17 @@ export function initCalendar(
 
   // Day view
   function renderDayView() {
-    const fd = filteredData().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    if (!state.selectedDay && fd.length) state.selectedDay = fd[0].date;
+    // Show all weekdays in the month as nav pills, not just days with items
+    const allDays = getMonthDays();
+    if (!state.selectedDay && allDays.length) state.selectedDay = allDays[0].date;
 
-    const seenDates = new Set<string>();
-    const pills = fd.filter(item => { if (seenDates.has(item.date)) return false; seenDates.add(item.date); return true; }).map(item => {
-      const d = new Date(item.date + 'T00:00:00');
-      return `<div class="day-pill ${item.date === state.selectedDay ? 'active' : ''}" data-action="selectDay" data-date="${item.date}">
+    const pills = allDays.map(dayInfo => {
+      const d = new Date(dayInfo.date + 'T00:00:00');
+      const hasItems = state.data.some(i => i.date === dayInfo.date);
+      return `<div class="day-pill ${dayInfo.date === state.selectedDay ? 'active' : ''}" data-action="selectDay" data-date="${dayInfo.date}">
         <div class="day-pill-name">${d.toLocaleDateString('en-GB', { weekday: 'short' })}</div>
         <div class="day-pill-date">${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+        ${hasItems ? '<div style="width:4px;height:4px;border-radius:50%;background:var(--approved);margin:2px auto 0"></div>' : ''}
       </div>`;
     }).join('');
 
@@ -366,6 +444,16 @@ export function initCalendar(
         </div>`;
       }).join('');
       detail = `<div class="day-cards-stack">${cards}</div><button class="add-item-btn" data-action="addItem" data-date="${state.selectedDay}">+ Add Content</button>`;
+    } else if (state.selectedDay) {
+      const d = new Date(state.selectedDay + 'T00:00:00');
+      const dayName = d.toLocaleDateString('en-GB', { weekday: 'long' });
+      const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      detail = `<div class="empty-state">
+        <div class="empty-icon">📝</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px">${dayName}, ${dateStr}</div>
+        <div style="margin-bottom:16px">No content planned for this day yet.</div>
+        <button class="add-item-btn" style="width:auto;display:inline-block;padding:12px 24px" data-action="addItem" data-date="${state.selectedDay}">+ Create First Post</button>
+      </div>`;
     }
     const main = container.querySelector('#mainContent');
     if (main) main.innerHTML = `<div class="day-nav"><div class="day-scroll">${pills}</div></div>${detail}`;
@@ -406,6 +494,19 @@ export function initCalendar(
           renderDayView();
         }
         break;
+
+      case 'goToday': {
+        const today = new Date().toISOString().slice(0, 7);
+        if (state.currentMonth !== today) {
+          state.currentMonth = today;
+          state.selectedDay = new Date().toISOString().slice(0, 10);
+          loadData();
+        } else {
+          state.selectedDay = new Date().toISOString().slice(0, 10);
+          render();
+        }
+        break;
+      }
 
       case 'changeMonth': {
         const dir = parseInt(target.dataset.dir || '0');
@@ -489,13 +590,29 @@ export function initCalendar(
       case 'addItem': {
         if (date) {
           const existing = state.data.filter(i => i.date === date);
-          if (!existing.length) return;
-          const maxSlot = existing.reduce((max, i) => Math.max(max, i.slot), -1);
-          const baseItem = existing.find(i => i.slot === 0) || existing[0];
+          const maxSlot = existing.length ? existing.reduce((max, i) => Math.max(max, i.slot), -1) : -1;
+          const newSlot = maxSlot + 1;
+
+          // Derive day/week info from date if no existing items
+          let dayName: string;
+          let weekLabel: string;
+          if (existing.length) {
+            const baseItem = existing.find(i => i.slot === 0) || existing[0];
+            dayName = baseItem.day;
+            weekLabel = baseItem.week;
+          } else {
+            const d = new Date(date + 'T00:00:00');
+            dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+            // Calculate week number within month
+            const allDays = getMonthDays();
+            const dayInfo = allDays.find(di => di.date === date);
+            weekLabel = dayInfo ? dayInfo.week : 'W1';
+          }
+
           const newItem: CalendarItem = {
-            id: date + '-' + (maxSlot + 1),
-            week: baseItem.week, day: baseItem.day,
-            date, slot: maxSlot + 1, owner: baseItem.owner,
+            id: date + '-' + newSlot,
+            week: weekLabel, day: dayName,
+            date, slot: newSlot, owner: config.owners[0]?.name || '',
             type: config.contentTypes[0] || 'Blog', title: '', caption: null,
             status: 'draft', reviewComment: null,
             platforms: Object.fromEntries(config.platforms.map(p => [p, false])),
@@ -582,6 +699,7 @@ export function initCalendar(
       `<button class="filter-chip" data-action="setFilter" data-filter="pending">Pending Review</button>`,
     ].join('');
 
+    container.className = 'calendar-app';
     container.innerHTML = `
       <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-spinner"></div>
@@ -616,6 +734,7 @@ export function initCalendar(
             <div class="month-label" id="monthLabel"></div>
             <button class="month-btn" data-action="changeMonth" data-dir="1">›</button>
           </div>
+          <button class="today-btn" data-action="goToday">Today</button>
           <div class="view-tabs">
             <button class="view-tab active" data-action="setView" data-view="month">Month</button>
             <button class="view-tab" data-action="setView" data-view="week">Week</button>
