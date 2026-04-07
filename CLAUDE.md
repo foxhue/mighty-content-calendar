@@ -84,6 +84,10 @@ Before committing and pushing, ALWAYS:
 
 Never skip these steps.
 
+## Deployment
+
+Hosted on Vercel (andrew-ibbotsons-projects/mighty-content-calendar). Deploy via `vercel --prod` from CLI. Env vars configured for all environments.
+
 ## Conventions
 
 - **Path alias**: `@/*` maps to project root

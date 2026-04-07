@@ -124,8 +124,7 @@ CREATE INDEX idx_approvals_workspace_month ON calendar_approvals(workspace_id, m
 CREATE INDEX idx_approvals_workspace_status ON calendar_approvals(workspace_id, status);
 
 -- 7. Drop the old approved column (now replaced by status)
--- Run this AFTER verifying the migration worked:
--- ALTER TABLE calendar_approvals DROP COLUMN approved;
+ALTER TABLE calendar_approvals DROP COLUMN IF EXISTS approved;
 
 -- ============================================================
 -- CLIENT B: Foxhue workspace (for testing multi-tenancy)
