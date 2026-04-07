@@ -1,6 +1,6 @@
-# Mighty Content Calendar
+# Content Calendar
 
-Multi-tenant content calendar for managing social media posts. Built with Next.js 16 + React 19 + Supabase + Resend. Vanilla JS calendar engine wrapped in a React shell.
+Multi-tenant content calendar for agencies managing social media posts on behalf of clients. Built with Next.js 16 + React 19 + Supabase + Resend. Vanilla JS calendar engine wrapped in a React shell. PRD: `PRD-ContentCalendar.docx`. Plan: `PLAN.md`.
 
 ## Architecture
 
@@ -68,6 +68,8 @@ Two tables, both with RLS enabled and no permissive policies (service role key b
 
 **calendar_approvals** — `id` (text PK, format `YYYY-MM-DD-slot`), `workspace_id` (FK → workspaces), `month`, `owner`, `day`, `week`, `date`, `slot`, `type`, `title`, `caption`, `status` (draft|pending_review|approved|changes_requested), `review_comment`, `platforms` (JSONB), `created_at`, `updated_at`
 
+Note: PRD defines target status lifecycle as DRAFT → NEEDS SIGN-OFF → APPROVED → SCHEDULED → LIVE. Current code has 4 statuses; SCHEDULED and LIVE are pending implementation.
+
 Migration file: `supabase/migration.sql`
 
 ## Multi-Tenancy
@@ -75,7 +77,7 @@ Migration file: `supabase/migration.sql`
 - **Slug-based routing**: `/<slug>` loads that workspace's calendar
 - **workspace_id scoping**: Every Supabase query filters by `workspace_id` — never omit this
 - **Review tokens**: Clients access `/review/<token>` — token-based, no auth needed. Never expose workspace slugs to clients.
-- Root `/` currently redirects to `/mighty`
+- Root `/` redirects to the first workspace by `created_at` (no hardcoded slug)
 
 ## Pre-Commit Workflow
 
