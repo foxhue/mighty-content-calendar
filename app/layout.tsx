@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Content Calendar",
-  description: "Multi-tenant content calendar by Foxhue",
+  description: "Multi-tenant content calendar",
 };
 
 export default function RootLayout({

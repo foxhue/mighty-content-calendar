@@ -1,6 +1,14 @@
 import { redirect } from 'next/navigation';
+import { getSupabaseServer } from '@/lib/supabase-server';
 
-export default function Home() {
-  // For now, redirect to mighty. Later: workspace picker or landing page.
-  redirect('/mighty');
+export default async function Home() {
+  const supabase = getSupabaseServer();
+  const { data } = await supabase
+    .from('workspaces')
+    .select('slug')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .single();
+
+  redirect(data?.slug ? `/${data.slug}` : '/mighty');
 }

@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Item not found' }, { status: 404 });
   }
 
-  // Send email notification to Foxhue
+  // Send email notification to workspace owner
   try {
     await sendReviewFeedback(ws, [{ item: updatedItem, action }]);
   } catch {

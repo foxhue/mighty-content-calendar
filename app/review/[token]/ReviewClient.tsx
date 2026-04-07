@@ -15,7 +15,8 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState<string | null>(null);
 
-  const primaryColor = workspace.owners?.[0]?.color || '#2563EB';
+  const theme = workspace.theme as Record<string, string>;
+  const primaryColor = workspace.owners?.[0]?.color || theme.text || '#1A1A18';
   const typeColors = workspace.type_colors as Record<string, string>;
 
   async function handleAction(itemId: string, action: 'approve' | 'request_changes', reviewComment?: string) {
@@ -48,13 +49,12 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
   const changesItems = items.filter(i => i.status === 'changes_requested');
 
   return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: '#F7F6F2', minHeight: '100vh' }}>
-      {/* Fonts loaded via root layout — no duplicate @import needed */}
+    <div style={{ fontFamily: "'DM Sans', sans-serif", background: theme.bg || '#F7F6F2', minHeight: '100vh' }}>
       <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
 
       {/* Header */}
       <div style={{
-        background: '#1A1A18', color: 'white', padding: '20px 32px',
+        background: theme.text || '#1A1A18', color: 'white', padding: '20px 32px',
         display: 'flex', alignItems: 'center', gap: 16,
       }}>
         <div style={{
@@ -72,18 +72,17 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
 
       {/* Content */}
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 24px' }}>
-        {/* Pending review */}
         {pendingItems.length > 0 && (
-          <Section title="Awaiting Your Review" count={pendingItems.length} color="#D97706">
+          <Section title="Awaiting Your Review" count={pendingItems.length} color={theme.pending || '#D97706'}>
             {pendingItems.map(item => (
-              <ReviewCard key={item.id} item={item} typeColors={typeColors} loading={loading === item.id}>
+              <ReviewCard key={item.id} item={item} typeColors={typeColors} loading={loading === item.id} theme={theme}>
                 <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
                   <button
                     onClick={() => handleAction(item.id, 'approve')}
                     disabled={loading === item.id}
                     style={{
                       padding: '10px 20px', borderRadius: 6, border: 'none',
-                      background: '#059669', color: 'white', fontWeight: 600,
+                      background: theme.approved || '#059669', color: 'white', fontWeight: 600,
                       fontSize: 13, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
                     }}
                   >
@@ -94,8 +93,8 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
                     disabled={loading === item.id}
                     style={{
                       padding: '10px 20px', borderRadius: 6,
-                      border: '1.5px solid #E4E2DC', background: 'white',
-                      color: '#8A8880', fontWeight: 600, fontSize: 13,
+                      border: `1.5px solid ${theme.border || '#E4E2DC'}`, background: theme.surface || 'white',
+                      color: theme.muted || '#8A8880', fontWeight: 600, fontSize: 13,
                       cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
                     }}
                   >
@@ -103,7 +102,6 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
                   </button>
                 </div>
 
-                {/* Changes modal */}
                 {activeModal === item.id && (
                   <div style={{
                     marginTop: 12, padding: 16, background: '#FEF2F2',
@@ -115,7 +113,7 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
                       placeholder="What changes would you like?"
                       style={{
                         width: '100%', minHeight: 80, padding: 10,
-                        border: '1px solid #E4E2DC', borderRadius: 6,
+                        border: `1px solid ${theme.border || '#E4E2DC'}`, borderRadius: 6,
                         fontFamily: "'DM Sans', sans-serif", fontSize: 13,
                         resize: 'vertical', outline: 'none',
                       }}
@@ -125,7 +123,7 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
                         onClick={() => setActiveModal(null)}
                         style={{
                           padding: '8px 16px', borderRadius: 6,
-                          border: '1px solid #E4E2DC', background: 'white',
+                          border: `1px solid ${theme.border || '#E4E2DC'}`, background: theme.surface || 'white',
                           fontSize: 12, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
                         }}
                       >
@@ -136,7 +134,7 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
                         disabled={!comment.trim()}
                         style={{
                           padding: '8px 16px', borderRadius: 6, border: 'none',
-                          background: comment.trim() ? '#EF4444' : '#E4E2DC',
+                          background: comment.trim() ? '#EF4444' : (theme.border || '#E4E2DC'),
                           color: 'white', fontWeight: 600, fontSize: 12,
                           cursor: comment.trim() ? 'pointer' : 'default',
                           fontFamily: "'DM Sans', sans-serif",
@@ -152,11 +150,10 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
           </Section>
         )}
 
-        {/* Changes requested */}
         {changesItems.length > 0 && (
           <Section title="Changes Requested" count={changesItems.length} color="#EF4444">
             {changesItems.map(item => (
-              <ReviewCard key={item.id} item={item} typeColors={typeColors} loading={false}>
+              <ReviewCard key={item.id} item={item} typeColors={typeColors} loading={false} theme={theme}>
                 {item.review_comment && (
                   <div style={{
                     marginTop: 12, padding: 12, background: '#FEF2F2',
@@ -171,15 +168,15 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
           </Section>
         )}
 
-        {/* Approved */}
         {approvedItems.length > 0 && (
-          <Section title="Approved" count={approvedItems.length} color="#059669">
+          <Section title="Approved" count={approvedItems.length} color={theme.approved || '#059669'}>
             {approvedItems.map(item => (
-              <ReviewCard key={item.id} item={item} typeColors={typeColors} loading={false}>
+              <ReviewCard key={item.id} item={item} typeColors={typeColors} loading={false} theme={theme}>
                 <div style={{
                   marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '6px 12px', background: '#ECFDF5', border: '1px solid #059669',
-                  borderRadius: 6, color: '#059669', fontWeight: 600, fontSize: 12,
+                  padding: '6px 12px', background: theme.approvedLight || '#ECFDF5',
+                  border: `1px solid ${theme.approved || '#059669'}`,
+                  borderRadius: 6, color: theme.approved || '#059669', fontWeight: 600, fontSize: 12,
                 }}>
                   ✓ Approved
                 </div>
@@ -189,7 +186,7 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
         )}
 
         {items.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '64px 24px', color: '#8A8880' }}>
+          <div style={{ textAlign: 'center', padding: '64px 24px', color: theme.muted || '#8A8880' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
             <div style={{ fontSize: 15, fontWeight: 500 }}>No posts to review right now</div>
             <div style={{ fontSize: 13, marginTop: 4 }}>Check back when new content is ready.</div>
@@ -223,11 +220,11 @@ function Section({ title, count, color, children }: {
   );
 }
 
-function ReviewCard({ item, typeColors, loading, children }: {
+function ReviewCard({ item, typeColors, loading, theme, children }: {
   item: CalendarApprovalRow; typeColors: Record<string, string>;
-  loading: boolean; children: React.ReactNode;
+  loading: boolean; theme: Record<string, string>; children: React.ReactNode;
 }) {
-  const typeColor = typeColors[item.type] || '#6B7280';
+  const typeColor = typeColors[item.type] || theme.muted || '#6B7280';
   const platforms = item.platforms as Record<string, boolean> | null;
   const activePlatforms = platforms
     ? Object.entries(platforms).filter(([, v]) => v).map(([k]) => k)
@@ -235,7 +232,7 @@ function ReviewCard({ item, typeColors, loading, children }: {
 
   return (
     <div style={{
-      background: 'white', border: '1px solid #E4E2DC', borderRadius: 10,
+      background: theme.surface || 'white', border: `1px solid ${theme.border || '#E4E2DC'}`, borderRadius: 10,
       padding: 20, opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s',
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -250,7 +247,7 @@ function ReviewCard({ item, typeColors, loading, children }: {
               {item.type}
             </span>
             {activePlatforms.length > 0 && (
-              <span style={{ fontSize: 11, color: '#8A8880' }}>
+              <span style={{ fontSize: 11, color: theme.muted || '#8A8880' }}>
                 {activePlatforms.join(', ')}
               </span>
             )}
@@ -260,7 +257,7 @@ function ReviewCard({ item, typeColors, loading, children }: {
           </div>
           {item.caption && (
             <div style={{
-              fontSize: 13, color: '#4A4A48', lineHeight: 1.6,
+              fontSize: 13, color: theme.text || '#4A4A48', lineHeight: 1.6,
               marginTop: 8, whiteSpace: 'pre-wrap' as const,
             }}>
               {item.caption}
@@ -268,7 +265,7 @@ function ReviewCard({ item, typeColors, loading, children }: {
           )}
         </div>
         <div style={{
-          fontSize: 11, color: '#8A8880', fontFamily: "'DM Mono', monospace",
+          fontSize: 11, color: theme.muted || '#8A8880', fontFamily: "'DM Mono', monospace",
           whiteSpace: 'nowrap' as const,
         }}>
           {new Date(item.date + 'T00:00:00').toLocaleDateString('en-GB', {

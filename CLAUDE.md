@@ -48,6 +48,8 @@ SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
 RESEND_API_KEY=...
 NOTIFICATION_EMAIL=hello@foxhue.com
+NEXT_PUBLIC_BASE_URL=https://your-domain.vercel.app
+SENDER_EMAIL=noreply@yourdomain.com
 ```
 
 ## Commands

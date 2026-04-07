@@ -25,7 +25,7 @@ export function getCalendarCSS(config: WorkspaceConfig): string {
   .header { background: var(--text); color: white; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
   .header-left { display: flex; align-items: center; gap: 16px; }
   .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-mark { width: 32px; height: 32px; background: var(--${config.owners[0]?.key || 'foxhue'}); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+  .logo-mark { width: 32px; height: 32px; background: var(--${config.owners[0]?.key || 'owner0'}); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
   .header-sub { font-size: 12px; opacity: 0.5; margin-top: 1px; font-family: 'DM Mono', monospace; }
   .legend { display: flex; gap: 16px; align-items: center; }
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; opacity: 0.8; }
@@ -156,22 +156,22 @@ export function getCalendarCSS(config: WorkspaceConfig): string {
   /* Multi-item day view */
   .day-cards-stack { display: flex; flex-direction: column; gap: 16px; }
   .add-item-btn { width: 100%; padding: 14px; border: 2px dashed var(--border); border-radius: var(--radius); background: transparent; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; margin-top: 16px; }
-  .add-item-btn:hover { border-color: var(--${config.owners[0]?.key || 'foxhue'}); color: var(--${config.owners[0]?.key || 'foxhue'}); background: var(--${config.owners[0]?.key || 'foxhue'}-light); }
+  .add-item-btn:hover { border-color: var(--${config.owners[0]?.key || 'owner0'}); color: var(--${config.owners[0]?.key || 'owner0'}); background: var(--${config.owners[0]?.key || 'owner0'}-light); }
   .delete-item-btn { padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
   .delete-item-btn:hover { border-color: #EF4444; color: #EF4444; background: #FEF2F2; }
   .item-number { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 4px; background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 
   /* Editable fields in day view */
   .day-edit-select { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; outline: none; transition: border-color 0.15s; }
-  .day-edit-select:hover, .day-edit-select:focus { border-color: var(--${config.owners[0]?.key || 'foxhue'}); }
+  .day-edit-select:hover, .day-edit-select:focus { border-color: var(--${config.owners[0]?.key || 'owner0'}); }
   .day-edit-input, .day-edit-textarea { font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); width: 100%; outline: none; transition: border-color 0.15s; }
-  .day-edit-input:hover, .day-edit-input:focus, .day-edit-textarea:hover, .day-edit-textarea:focus { border-color: var(--${config.owners[0]?.key || 'foxhue'}); }
+  .day-edit-input:hover, .day-edit-input:focus, .day-edit-textarea:hover, .day-edit-textarea:focus { border-color: var(--${config.owners[0]?.key || 'owner0'}); }
   .day-edit-input::placeholder, .day-edit-textarea::placeholder { color: var(--muted); font-style: italic; font-weight: 400; }
   .day-edit-textarea { font-size: 13px; font-weight: 400; min-height: 80px; resize: vertical; line-height: 1.5; }
 
   /* Loading overlay */
   .loading-overlay { position: fixed; inset: 0; background: rgba(247,246,242,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; gap: 12px; }
-  .loading-spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--${config.owners[0]?.key || 'foxhue'}); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .loading-spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--${config.owners[0]?.key || 'owner0'}); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-text { font-size: 13px; color: var(--muted); font-family: 'DM Mono', monospace; }
 
