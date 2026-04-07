@@ -149,6 +149,14 @@ background: var(--bg); }
   .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
   .empty-icon { font-size: 32px; margin-bottom: 12px; }
 
+  /* Multi-item day view */
+  .day-cards-stack { display: flex; flex-direction: column; gap: 16px; }
+  .add-item-btn { width: 100%; padding: 14px; border: 2px dashed var(--border); border-radius: var(--radius); background: transparent; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; margin-top: 16px; }
+  .add-item-btn:hover { border-color: var(--foxhue); color: var(--foxhue); background: var(--foxhue-light); }
+  .delete-item-btn { padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
+  .delete-item-btn:hover { border-color: #EF4444; color: #EF4444; background: #FEF2F2; }
+  .item-number { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 4px; background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+
   /* Editable fields in day view */
   .day-edit-select { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; outline: none; transition: border-color 0.15s; }
   .day-edit-select:hover, .day-edit-select:focus { border-color: var(--foxhue); }
@@ -236,7 +244,10 @@ const sb = {
   headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
   async get(month) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/calendar_approvals?month=eq.${month}&select=*`, { headers: this.headers });
-    return res.json();
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error('Unexpected response format');
+    return data;
   },
   async upsert(row) {
     row.updated_at = new Date().toISOString();
@@ -246,8 +257,18 @@ const sb = {
       body: JSON.stringify(row)
     });
     return res.ok;
+  },
+  async delete(id) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/calendar_approvals?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: this.headers
+    });
+    return res.ok;
   }
 };
+
+function itemId(item) { return item.date + '-' + item.slot; }
+function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 
 // ============================================================
 // BASE CALENDAR DATA
@@ -306,24 +327,43 @@ async function loadFromSupabase() {
   try {
     const base = (calendarData[currentMonth] || []).map(i => ({
       ...i,
+      slot: 0,
       platforms: Object.fromEntries(PLATFORMS.map(p => [p, false]))
     }));
 
     const rows = await sb.get(currentMonth);
+    const matchedIds = new Set();
 
     // Merge remote state into base data
     data = base.map(item => {
-      const remote = rows.find(r => r.id === item.date);
+      const remote = rows.find(r => r.id === itemId(item) || r.id === item.date);
       if (remote) {
+        matchedIds.add(remote.id);
         return {
           ...item,
-          approved: remote.approved !== undefined ? remote.approved : item.approved,
-          platforms: { ...item.platforms, ...(remote.platforms || {}) },
-          type: remote.type || item.type,
-          title: remote.title || item.title
+          approved: typeof remote.approved === 'boolean' ? remote.approved : item.approved,
+          platforms: { ...item.platforms, ...((remote.platforms && typeof remote.platforms === 'object') ? remote.platforms : {}) },
+          type: CONTENT_TYPES.includes(remote.type_override) ? remote.type_override : item.type,
+          title: remote.title_override != null ? remote.title_override : item.title
         };
       }
       return item;
+    });
+
+    // Append remote-only rows (added items with slot > 0)
+    rows.filter(r => !matchedIds.has(r.id) && r.id.match(/^\d{4}-\d{2}-\d{2}-\d+$/)).forEach(r => {
+      const parts = r.id.match(/^(\d{4}-\d{2}-\d{2})-(\d+)$/);
+      if (!parts) return;
+      const date = parts[1], slot = parseInt(parts[2]);
+      const baseItem = base.find(b => b.date === date);
+      data.push({
+        week: baseItem ? baseItem.week : '', day: baseItem ? baseItem.day : '',
+        date, slot, owner: baseItem ? baseItem.owner : 'FoxHue',
+        type: CONTENT_TYPES.includes(r.type_override) ? r.type_override : 'Blog',
+        title: r.title_override != null ? r.title_override : '',
+        approved: typeof r.approved === 'boolean' ? r.approved : false,
+        platforms: { ...Object.fromEntries(PLATFORMS.map(p => [p, false])), ...((r.platforms && typeof r.platforms === 'object') ? r.platforms : {}) }
+      });
     });
 
     setSyncStatus('synced', 'Live');
@@ -331,9 +371,9 @@ async function loadFromSupabase() {
     render();
   } catch(e) {
     setSyncStatus('error', 'Offline');
-    // Fall back to base data
     data = (calendarData[currentMonth] || []).map(i => ({
       ...i,
+      slot: 0,
       platforms: Object.fromEntries(PLATFORMS.map(p => [p, false]))
     }));
     document.getElementById('loadingOverlay').style.display = 'none';
@@ -341,19 +381,24 @@ async function loadFromSupabase() {
   }
 }
 
-async function saveToSupabase(date, changes) {
+async function saveToSupabase(date, slot, changes) {
   setSyncStatus('syncing', 'Saving…');
-  const item = data.find(i => i.date === date);
+  const item = data.find(i => i.date === date && i.slot === slot);
   if (!item) return;
   const ok = await sb.upsert({
-    id: date,
+    id: itemId(item),
     month: currentMonth,
     approved: item.approved,
     platforms: item.platforms,
     ...changes
   });
-  setSyncStatus(ok ? 'synced' : 'error', ok ? 'Saved ✓' : 'Save failed');
-  setTimeout(() => setSyncStatus('synced', 'Live'), 2000);
+  if (ok) {
+    setSyncStatus('synced', 'Saved ✓');
+    setTimeout(() => setSyncStatus('synced', 'Live'), 2000);
+  } else {
+    setSyncStatus('error', 'Save failed');
+  }
+  return ok;
 }
 
 // Poll for remote changes every 30 seconds
@@ -361,13 +406,16 @@ setInterval(async () => {
   try {
     const rows = await sb.get(currentMonth);
     let changed = false;
+    const matchedIds = new Set();
+
     data = data.map(item => {
-      const remote = rows.find(r => r.id === item.date);
+      const remote = rows.find(r => r.id === itemId(item) || (item.slot === 0 && r.id === item.date));
       if (remote) {
-        const newApproved = remote.approved !== undefined ? remote.approved : item.approved;
-        const newPlatforms = { ...item.platforms, ...(remote.platforms || {}) };
-        const newType = remote.type || item.type;
-        const newTitle = remote.title || item.title;
+        matchedIds.add(remote.id);
+        const newApproved = typeof remote.approved === 'boolean' ? remote.approved : item.approved;
+        const newPlatforms = { ...item.platforms, ...((remote.platforms && typeof remote.platforms === 'object') ? remote.platforms : {}) };
+        const newType = CONTENT_TYPES.includes(remote.type_override) ? remote.type_override : item.type;
+        const newTitle = remote.title_override != null ? remote.title_override : item.title;
         if (newApproved !== item.approved || JSON.stringify(newPlatforms) !== JSON.stringify(item.platforms) || newType !== item.type || newTitle !== item.title) {
           changed = true;
           return { ...item, approved: newApproved, platforms: newPlatforms, type: newType, title: newTitle };
@@ -375,8 +423,36 @@ setInterval(async () => {
       }
       return item;
     });
-    if (changed) render();
-  } catch(e) {}
+
+    // Append remote-only rows (added by another browser)
+    const base = (calendarData[currentMonth] || []).map(i => ({ ...i, slot: 0 }));
+    rows.filter(r => !matchedIds.has(r.id) && r.id.match(/^\d{4}-\d{2}-\d{2}-\d+$/) && !data.some(d => itemId(d) === r.id)).forEach(r => {
+      const parts = r.id.match(/^(\d{4}-\d{2}-\d{2})-(\d+)$/);
+      if (!parts) return;
+      const date = parts[1], slot = parseInt(parts[2]);
+      const baseItem = base.find(b => b.date === date);
+      data.push({
+        week: baseItem ? baseItem.week : '', day: baseItem ? baseItem.day : '',
+        date, slot, owner: baseItem ? baseItem.owner : 'FoxHue',
+        type: CONTENT_TYPES.includes(r.type_override) ? r.type_override : 'Blog',
+        title: r.title_override != null ? r.title_override : '',
+        approved: typeof r.approved === 'boolean' ? r.approved : false,
+        platforms: { ...Object.fromEntries(PLATFORMS.map(p => [p, false])), ...((r.platforms && typeof r.platforms === 'object') ? r.platforms : {}) }
+      });
+      changed = true;
+    });
+
+    // Remove items deleted remotely
+    const remoteIds = new Set(rows.map(r => r.id));
+    const before = data.length;
+    data = data.filter(item => item.slot === 0 || remoteIds.has(itemId(item)));
+    if (data.length !== before) changed = true;
+
+    if (changed) {
+      const isEditing = document.activeElement && (document.activeElement.classList.contains('day-edit-input') || document.activeElement.classList.contains('day-edit-select'));
+      if (!isEditing) render();
+    }
+  } catch(e) { setSyncStatus('error', 'Sync failed'); }
 }, 30000);
 
 // ============================================================
@@ -428,26 +504,31 @@ function renderStats() {
 // ============================================================
 function renderMonthView() {
   const weeks = getWeeks();
-  const fdDates = new Set(filteredData().map(i => i.date));
+  const fd = filteredData();
+  const fdSet = new Set(fd.map(i => itemId(i)));
   const days = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
   let html = `<div class="month-view"><div class="month-grid-header">${days.map(d=>`<div class="day-header">${d}</div>`).join('')}</div><div class="month-weeks">`;
   Object.entries(weeks).forEach(([wk, items]) => {
     html += `<div class="month-week">`;
     days.forEach(day => {
-      const item = items.find(i => i.day === day);
-      if (!item || !fdDates.has(item.date)) { html += `<div class="month-cell"></div>`; return; }
-      const sc = getStatusClass(item);
-      const short = item.title.length > 40 ? item.title.slice(0,38)+'…' : item.title;
-      html += `<div class="month-cell" onclick="showDayDetail('${item.date}')">
-        <div class="cell-date"><span>${formatDate(item.date)}</span><span style="font-size:9px;color:var(--muted)">${wk}</span></div>
-        <div class="cell-pill ${getOwnerClass(item.owner)}" title="${item.title}">
+      const dayItems = items.filter(i => i.day === day && fdSet.has(itemId(i)));
+      if (!dayItems.length) { html += `<div class="month-cell"></div>`; return; }
+      const date = dayItems[0].date;
+      const pillsHtml = dayItems.map(item => {
+        const sc = getStatusClass(item);
+        const short = item.title.length > 40 ? item.title.slice(0,38)+'…' : item.title;
+        return `<div class="cell-pill ${getOwnerClass(item.owner)}" title="${esc(item.title)}">
           <div class="pill-dot"></div>
           <span style="flex:1;min-width:0">
-            <span style="font-size:9px;font-weight:600;opacity:0.6;text-transform:uppercase;letter-spacing:0.4px;display:block">${item.type}</span>
-            <span ${item.title==='TBC'?'style="font-style:italic;opacity:0.6"':''}>${short}</span>
+            <span style="font-size:9px;font-weight:600;opacity:0.6;text-transform:uppercase;letter-spacing:0.4px;display:block">${esc(item.type)}</span>
+            <span ${item.title==='TBC'?'style="font-style:italic;opacity:0.6"':''}>${esc(short)}</span>
           </span>
           <div class="status-dot ${sc}"></div>
-        </div>
+        </div>`;
+      }).join('');
+      html += `<div class="month-cell" onclick="showDayDetail('${date}')">
+        <div class="cell-date"><span>${formatDate(date)}</span><span style="font-size:9px;color:var(--muted)">${wk}</span></div>
+        ${pillsHtml}
       </div>`;
     });
     html += `</div>`;
@@ -461,23 +542,23 @@ function renderMonthView() {
 // ============================================================
 function renderWeekView() {
   const weeks = getWeeks();
-  const fdDates = new Set(filteredData().map(i => i.date));
+  const fdIds = new Set(filteredData().map(i => itemId(i)));
   let html = `<div class="week-view">`;
   Object.entries(weeks).forEach(([wk, items]) => {
-    const sorted = items.sort((a,b) => getDayOrder(a.day)-getDayOrder(b.day)).filter(i => fdDates.has(i.date));
+    const sorted = items.sort((a,b) => getDayOrder(a.day)-getDayOrder(b.day) || a.slot-b.slot).filter(i => fdIds.has(itemId(i)));
     if (!sorted.length) return;
     const dates = sorted.map(i => formatDate(i.date));
     html += `<div class="week-section">
       <div class="week-header"><span class="week-badge">${wk}</span><span class="week-dates">${dates[0]} – ${dates[dates.length-1]}</span></div>
       <div class="week-grid-header"><div>Day</div><div>Date</div><div>Content</div><div>Status</div><div>Platforms</div></div>`;
     sorted.forEach(item => {
-      const plats = PLATFORMS.map(p => `<div class="platform-dot ${item.platforms[p]?'posted':''}" onclick="event.stopPropagation();togglePlatform('${item.date}','${p}')" title="${p}">${p[0]}</div>`).join('');
+      const plats = PLATFORMS.map(p => `<div class="platform-dot ${item.platforms[p]?'posted':''}" onclick="event.stopPropagation();togglePlatform('${item.date}',${item.slot},'${p}')" title="${p}">${p[0]}</div>`).join('');
       html += `<div class="week-row" onclick="showDayDetail('${item.date}')">
         <div class="week-cell"><div><div class="week-day-name">${item.day}</div><div style="margin-top:2px"><span class="owner-badge ${getOwnerClass(item.owner)}">${item.owner}</span></div></div></div>
         <div class="week-cell"><span class="week-date-val">${formatDate(item.date)}</span></div>
         <div class="week-cell" style="flex-direction:column;align-items:flex-start;gap:3px">
-          <span class="type-tag" style="color:${getTypeColor(item.type)};border:1px solid ${getTypeColor(item.type)}20;background:${getTypeColor(item.type)}10">${item.type}</span>
-          <div class="content-title ${item.title==='TBC'?'tbc':''}">${item.title}</div>
+          <span class="type-tag" style="color:${getTypeColor(item.type)};border:1px solid ${getTypeColor(item.type)}20;background:${getTypeColor(item.type)}10">${esc(item.type)}</span>
+          <div class="content-title ${item.title==='TBC'?'tbc':''}">${esc(item.title)}</div>
         </div>
         <div class="week-cell"><span class="status-pill ${getStatusClass(item)}">${getStatusLabel(item)}</span></div>
         <div class="week-cell"><div class="platforms-cell">${plats}</div></div>
@@ -495,7 +576,10 @@ function renderWeekView() {
 function renderDayView() {
   const fd = filteredData().sort((a,b) => new Date(a.date)-new Date(b.date));
   if (!selectedDay && fd.length) selectedDay = fd[0].date;
-  const pills = fd.map(item => {
+
+  // Deduplicate pills by date
+  const seenDates = new Set();
+  const pills = fd.filter(item => { if (seenDates.has(item.date)) return false; seenDates.add(item.date); return true; }).map(item => {
     const d = new Date(item.date+'T00:00:00');
     return `<div class="day-pill ${item.date===selectedDay?'active':''}" onclick="selectDay('${item.date}')">
       <div class="day-pill-name">${d.toLocaleDateString('en-GB',{weekday:'short'})}</div>
@@ -503,31 +587,38 @@ function renderDayView() {
     </div>`;
   }).join('');
 
-  const item = data.find(i => i.date === selectedDay);
+  const dayItems = data.filter(i => i.date === selectedDay).sort((a,b) => a.slot - b.slot);
   let detail = '';
-  if (item) {
-    const plats = PLATFORMS.map(p => `<div class="platform-toggle ${item.platforms[p]?'posted':''}" onclick="togglePlatform('${item.date}','${p}')"><div class="platform-check"></div>${p}</div>`).join('');
-    const approveSection = item.approved === null ? '' : item.approved
-      ? `<div class="approve-section"><div class="approved-badge">✓ Approved by Mighty</div><button class="approve-btn unapprove" onclick="toggleApproval('${item.date}')">Revoke Approval</button></div>`
-      : `<div class="approve-section"><div style="color:var(--muted);font-size:13px">Awaiting Mighty sign-off</div><button class="approve-btn approve" onclick="toggleApproval('${item.date}')">✓ Mark as Approved</button></div>`;
-    detail = `<div class="day-card">
-      <div class="day-card-header">
-        <div><div class="day-card-title">${item.day}</div><div class="day-card-date">${formatDate(item.date)} · ${item.week}</div></div>
-        <div style="display:flex;gap:8px;align-items:center"><span class="owner-badge ${getOwnerClass(item.owner)}">${item.owner}</span><span class="status-pill ${getStatusClass(item)}">${getStatusLabel(item)}</span></div>
-      </div>
-      <div class="day-content">
-        <div class="day-detail-row"><div class="day-detail-label">Type</div><div class="day-detail-value">
-          <select class="day-edit-select" style="color:${getTypeColor(item.type)}" onchange="updateType('${item.date}', this.value)">
-            ${CONTENT_TYPES.map(t => `<option value="${t}" ${t===item.type?'selected':''}>${t}</option>`).join('')}
-          </select>
-        </div></div>
-        <div class="day-detail-row"><div class="day-detail-label">Title</div><div class="day-detail-value">
-          <input class="day-edit-input" value="${item.title.replace(/"/g,'&quot;')}" placeholder="Enter title…" onblur="updateTitle('${item.date}', this.value)" onkeydown="if(event.key==='Enter')this.blur()">
-        </div></div>
-        ${item.approved !== null ? `<div style="margin-top:16px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);margin-bottom:10px">Platform Publishing</div><div class="day-platforms">${plats}</div></div>` : ''}
-        ${approveSection}
-      </div>
-    </div>`;
+  if (dayItems.length) {
+    const cards = dayItems.map((item, idx) => {
+      const plats = PLATFORMS.map(p => `<div class="platform-toggle ${item.platforms[p]?'posted':''}" onclick="togglePlatform('${item.date}',${item.slot},'${p}')"><div class="platform-check"></div>${p}</div>`).join('');
+      const approveSection = item.approved === null ? '' : item.approved
+        ? `<div class="approve-section"><div class="approved-badge">✓ Approved by Mighty</div><button class="approve-btn unapprove" onclick="toggleApproval('${item.date}',${item.slot})">Revoke Approval</button></div>`
+        : `<div class="approve-section"><div style="color:var(--muted);font-size:13px">Awaiting Mighty sign-off</div><button class="approve-btn approve" onclick="toggleApproval('${item.date}',${item.slot})">✓ Mark as Approved</button></div>`;
+      const deleteBtn = item.slot > 0 ? `<button class="delete-item-btn" onclick="deleteItem('${item.date}',${item.slot})">Delete</button>` : '';
+      return `<div class="day-card">
+        <div class="day-card-header">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px"><div class="day-card-title">${item.day}</div><span class="item-number">Item ${idx+1}</span></div>
+            <div class="day-card-date">${formatDate(item.date)} · ${item.week}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">${deleteBtn}<span class="owner-badge ${getOwnerClass(item.owner)}">${item.owner}</span><span class="status-pill ${getStatusClass(item)}">${getStatusLabel(item)}</span></div>
+        </div>
+        <div class="day-content">
+          <div class="day-detail-row"><div class="day-detail-label">Type</div><div class="day-detail-value">
+            <select class="day-edit-select" style="color:${getTypeColor(item.type)}" onchange="updateType('${item.date}',${item.slot},this.value)">
+              ${CONTENT_TYPES.map(t => `<option value="${t}" ${t===item.type?'selected':''}>${t}</option>`).join('')}
+            </select>
+          </div></div>
+          <div class="day-detail-row"><div class="day-detail-label">Title</div><div class="day-detail-value">
+            <input class="day-edit-input" value="${esc(item.title)}" placeholder="Enter title…" onblur="updateTitle('${item.date}',${item.slot},this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+          </div></div>
+          ${item.approved !== null ? `<div style="margin-top:16px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);margin-bottom:10px">Platform Publishing</div><div class="day-platforms">${plats}</div></div>` : ''}
+          ${approveSection}
+        </div>
+      </div>`;
+    }).join('');
+    detail = `<div class="day-cards-stack">${cards}</div><button class="add-item-btn" onclick="addItem('${selectedDay}')">+ Add Content</button>`;
   }
   document.getElementById('mainContent').innerHTML = `<div class="day-nav"><div class="day-scroll">${pills}</div></div>${detail}`;
 }
@@ -535,36 +626,74 @@ function renderDayView() {
 // ============================================================
 // INTERACTIONS
 // ============================================================
-async function toggleApproval(date) {
-  const item = data.find(i => i.date === date);
+async function toggleApproval(date, slot) {
+  const item = data.find(i => i.date === date && i.slot === slot);
   if (!item || item.approved === null) return;
   item.approved = !item.approved;
   render();
-  await saveToSupabase(date);
+  await saveToSupabase(date, slot);
 }
 
-async function updateType(date, newType) {
-  const item = data.find(i => i.date === date);
+async function updateType(date, slot, newType) {
+  const item = data.find(i => i.date === date && i.slot === slot);
   if (!item || item.type === newType) return;
   item.type = newType;
-  render();
-  await saveToSupabase(date, { type: newType });
+  renderStats();
+  await saveToSupabase(date, slot, { type_override: newType });
 }
 
-async function updateTitle(date, newTitle) {
-  const item = data.find(i => i.date === date);
+async function updateTitle(date, slot, newTitle) {
+  const item = data.find(i => i.date === date && i.slot === slot);
   if (!item || item.title === newTitle) return;
   item.title = newTitle;
-  render();
-  await saveToSupabase(date, { title: newTitle });
+  await saveToSupabase(date, slot, { title_override: newTitle });
 }
 
-async function togglePlatform(date, platform) {
-  const item = data.find(i => i.date === date);
+async function togglePlatform(date, slot, platform) {
+  const item = data.find(i => i.date === date && i.slot === slot);
   if (!item) return;
   item.platforms[platform] = !item.platforms[platform];
   render();
-  await saveToSupabase(date);
+  await saveToSupabase(date, slot);
+}
+
+async function addItem(date) {
+  const existing = data.filter(i => i.date === date);
+  if (!existing.length) return;
+  const maxSlot = existing.reduce((max, i) => Math.max(max, i.slot), -1);
+  const baseItem = existing.find(i => i.slot === 0) || existing[0];
+  const newItem = {
+    week: baseItem.week, day: baseItem.day,
+    date, slot: maxSlot + 1, owner: baseItem.owner,
+    type: 'Blog', title: '', approved: false,
+    platforms: Object.fromEntries(PLATFORMS.map(p => [p, false]))
+  };
+  data.push(newItem);
+  render();
+  const ok = await saveToSupabase(date, newItem.slot, { type_override: newItem.type, title_override: newItem.title });
+  if (!ok) {
+    const idx = data.findIndex(i => i.date === date && i.slot === newItem.slot);
+    if (idx !== -1) data.splice(idx, 1);
+    render();
+  }
+}
+
+async function deleteItem(date, slot) {
+  if (slot === 0) return;
+  if (!confirm('Delete this content item?')) return;
+  const idx = data.findIndex(i => i.date === date && i.slot === slot);
+  if (idx === -1) return;
+  const id = itemId(data[idx]);
+  setSyncStatus('syncing', 'Deleting…');
+  const ok = await sb.delete(id);
+  if (ok) {
+    data.splice(idx, 1);
+    render();
+    setSyncStatus('synced', 'Deleted ✓');
+    setTimeout(() => setSyncStatus('synced', 'Live'), 2000);
+  } else {
+    setSyncStatus('error', 'Delete failed');
+  }
 }
 
 function showDayDetail(date) {
