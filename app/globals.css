@@ -1,0 +1,5 @@
+/* Minimal global reset — calendar styles are injected dynamically per workspace */
+body {
+  margin: 0;
+  padding: 0;
+}
