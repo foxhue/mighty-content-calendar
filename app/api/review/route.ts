@@ -4,8 +4,16 @@ import { sendReviewFeedback } from '@/lib/email';
 
 // POST /api/review — approve or request changes
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { token, itemId, action, comment } = body;
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const { token, itemId, action, comment } = body as {
+    token?: string; itemId?: string; action?: string; comment?: string;
+  };
 
   if (!token || !itemId || !action) {
     return Response.json({ error: 'Missing token, itemId, or action' }, { status: 400 });
@@ -38,7 +46,7 @@ export async function POST(request: NextRequest) {
     update.review_comment = null;
   } else {
     update.status = 'changes_requested';
-    update.review_comment = comment || '';
+    update.review_comment = typeof comment === 'string' ? comment.slice(0, 5000) : '';
   }
 
   // Update the item, scoped to this workspace

@@ -11,6 +11,15 @@ function getNotificationEmail(): string {
   return process.env.NOTIFICATION_EMAIL || 'hello@foxhue.com';
 }
 
+function escHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export async function sendReviewReady(
   workspace: WorkspaceRow,
   items: CalendarApprovalRow[]
@@ -21,16 +30,16 @@ export async function sendReviewReady(
   const reviewUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://calendar.foxhue.com'}/review/${workspace.review_token}`;
 
   const itemList = items
-    .map(i => `<li><strong>${i.type}</strong>: ${i.title || 'Untitled'}${i.caption ? ` — ${i.caption.slice(0, 80)}…` : ''}</li>`)
+    .map(i => `<li><strong>${escHtml(i.type)}</strong>: ${escHtml(i.title || 'Untitled')}${i.caption ? ` — ${escHtml(i.caption.slice(0, 80))}…` : ''}</li>`)
     .join('');
 
   await resend.emails.send({
     from: 'Content Calendar <calendar@foxhue.com>',
     to: workspace.client_email,
-    subject: `${workspace.name} — Posts Ready for Review`,
+    subject: `${escHtml(workspace.name)} — Posts Ready for Review`,
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1A1A18;">${workspace.name} Content Calendar</h2>
+        <h2 style="color: #1A1A18;">${escHtml(workspace.name)} Content Calendar</h2>
         <p>The following posts are ready for your review:</p>
         <ul>${itemList}</ul>
         <p style="margin-top: 24px;">
@@ -58,19 +67,19 @@ export async function sendReviewFeedback(
       const emoji = a.action === 'approve' ? '✅' : '🔄';
       const label = a.action === 'approve' ? 'Approved' : 'Changes Requested';
       const comment = a.action === 'request_changes' && a.item.review_comment
-        ? ` — "${a.item.review_comment}"`
+        ? ` — "${escHtml(a.item.review_comment)}"`
         : '';
-      return `<li>${emoji} <strong>${a.item.type}</strong>: ${a.item.title || 'Untitled'} — ${label}${comment}</li>`;
+      return `<li>${emoji} <strong>${escHtml(a.item.type)}</strong>: ${escHtml(a.item.title || 'Untitled')} — ${label}${comment}</li>`;
     })
     .join('');
 
   await resend.emails.send({
     from: 'Content Calendar <calendar@foxhue.com>',
     to: notifyEmail,
-    subject: `${workspace.name} — Client Review Feedback`,
+    subject: `${escHtml(workspace.name)} — Client Review Feedback`,
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1A1A18;">${workspace.name} — Review Feedback</h2>
+        <h2 style="color: #1A1A18;">${escHtml(workspace.name)} — Review Feedback</h2>
         <p>The client has reviewed the following posts:</p>
         <ul>${actionLines}</ul>
         <p style="color: #8A8880; font-size: 12px; margin-top: 32px;">

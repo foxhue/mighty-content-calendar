@@ -4,8 +4,14 @@ import { sendReviewReady } from '@/lib/email';
 
 // POST /api/calendar/notify — send review-ready email to client
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { workspace, action } = body;
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const { workspace, action } = body as { workspace?: string; action?: string };
 
   if (!workspace || action !== 'review_ready') {
     return Response.json({ error: 'Invalid request' }, { status: 400 });

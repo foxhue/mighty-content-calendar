@@ -49,10 +49,8 @@ export default function ReviewClient({ workspace, items: initialItems, token }: 
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: '#F7F6F2', minHeight: '100vh' }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-      `}</style>
+      {/* Fonts loaded via root layout — no duplicate @import needed */}
+      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
 
       {/* Header */}
       <div style={{

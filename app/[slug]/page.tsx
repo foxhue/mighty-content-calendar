@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase-server';
 import { rowToWorkspaceConfig } from '@/lib/types';
+import { getCalendarCSS } from '@/lib/calendar-styles';
 import type { WorkspaceRow, CalendarApprovalRow } from '@/lib/types';
 import CalendarClient from './CalendarClient';
 
@@ -25,6 +26,9 @@ export default async function WorkspacePage({
 
   const config = rowToWorkspaceConfig(wsRow as WorkspaceRow);
 
+  // Strip sensitive fields before sending to client
+  const { reviewToken: _rt, clientEmail: _ce, ...safeConfig } = config;
+
   // Load current month's data
   const currentMonth = new Date().toISOString().slice(0, 7);
   const { data: items } = await supabase
@@ -35,10 +39,16 @@ export default async function WorkspacePage({
     .order('date', { ascending: true })
     .order('slot', { ascending: true });
 
+  // Generate CSS server-side to avoid FOUC
+  const css = getCalendarCSS(config);
+
   return (
-    <CalendarClient
-      config={config}
-      initialData={(items || []) as CalendarApprovalRow[]}
-    />
+    <>
+      <style dangerouslySetInnerHTML={{ __html: css }} />
+      <CalendarClient
+        config={safeConfig}
+        initialData={(items || []) as CalendarApprovalRow[]}
+      />
+    </>
   );
 }

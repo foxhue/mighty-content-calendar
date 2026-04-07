@@ -44,9 +44,12 @@ function rowToItem(row: CalendarApprovalRow): CalendarItem {
 }
 
 function esc(str: string): string {
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function itemId(item: CalendarItem): string {
@@ -190,14 +193,12 @@ export function initCalendar(
   }
 
   function filteredData(): CalendarItem[] {
-    return state.data.filter(item => {
-      if (state.currentFilter === 'all') return true;
-      // Check if filter matches an owner key
-      const ownerMatch = config.owners.find(o => o.key === state.currentFilter);
-      if (ownerMatch) return item.owner === ownerMatch.name;
-      if (state.currentFilter === 'pending') return item.status === 'pending_review';
-      return true;
-    });
+    if (state.currentFilter === 'all') return state.data;
+    if (state.currentFilter === 'pending') return state.data.filter(item => item.status === 'pending_review');
+    // Check if filter matches an owner key — precompute once
+    const ownerMatch = config.owners.find(o => o.key === state.currentFilter);
+    if (ownerMatch) return state.data.filter(item => item.owner === ownerMatch.name);
+    return state.data;
   }
 
   // Render stats
@@ -455,9 +456,11 @@ export function initCalendar(
 
       case 'setStatus': {
         if (date && slot !== undefined) {
+          const newStatus = target.dataset.status;
+          if (!newStatus || !['draft', 'pending_review', 'approved', 'changes_requested'].includes(newStatus)) break;
           const item = state.data.find(i => i.date === date && i.slot === slot);
           if (item) {
-            item.status = target.dataset.status!;
+            item.status = newStatus;
             render();
             saveItem(item);
           }
@@ -513,13 +516,15 @@ export function initCalendar(
       case 'deleteItem': {
         if (date && slot !== undefined && slot > 0) {
           if (!confirm('Delete this content item?')) return;
-          const idx = state.data.findIndex(i => i.date === date && i.slot === slot);
-          if (idx === -1) return;
-          const id = itemId(state.data[idx]);
+          const targetItem = state.data.find(i => i.date === date && i.slot === slot);
+          if (!targetItem) return;
+          const targetId = itemId(targetItem);
           setSyncStatus('syncing', 'Deleting…');
-          apiDelete(id).then(ok => {
+          apiDelete(targetId).then(ok => {
             if (ok) {
-              state.data.splice(idx, 1);
+              // Re-find after async to avoid stale index
+              const currentIdx = state.data.findIndex(i => itemId(i) === targetId);
+              if (currentIdx !== -1) state.data.splice(currentIdx, 1);
               render();
               setSyncStatus('synced', 'Deleted ✓');
               setTimeout(() => setSyncStatus('synced', 'Live'), 2000);
@@ -628,20 +633,22 @@ export function initCalendar(
   buildShell();
   container.addEventListener('click', handleClick);
   container.addEventListener('change', handleChange);
-  container.addEventListener('blur', (e) => {
+
+  function handleBlur(e: Event) {
     const target = e.target as HTMLElement;
     if (target.dataset.action === 'updateTitle' || target.dataset.action === 'updateCaption') {
       handleChange(e);
     }
-  }, true);
+  }
+  container.addEventListener('blur', handleBlur, true);
 
-  // Handle Enter key on title input
-  container.addEventListener('keydown', (e) => {
+  function handleKeydown(e: Event) {
     const target = e.target as HTMLElement;
     if ((e as KeyboardEvent).key === 'Enter' && target.dataset.action === 'updateTitle') {
       (target as HTMLInputElement).blur();
     }
-  });
+  }
+  container.addEventListener('keydown', handleKeydown);
 
   // Initial render (data already loaded from server component)
   const overlay = container.querySelector('#loadingOverlay') as HTMLElement;
@@ -649,12 +656,12 @@ export function initCalendar(
   setSyncStatus('synced', 'Live');
   render();
 
-  // Poll for changes every 30 seconds
-  state.pollInterval = setInterval(async () => {
+  // Poll for changes every 30 seconds, pausing when tab is hidden
+  async function pollOnce() {
     try {
       const rows = await apiGet(state.currentMonth);
       const newData = rows.map(rowToItem);
-      const oldJson = JSON.stringify(state.data.map(i => ({ ...i })));
+      const oldJson = JSON.stringify(state.data);
       const newJson = JSON.stringify(newData);
       if (oldJson !== newJson) {
         const isEditing = document.activeElement && (
@@ -670,12 +677,40 @@ export function initCalendar(
     } catch {
       setSyncStatus('error', 'Sync failed');
     }
-  }, 30000);
+  }
+
+  function startPolling() {
+    if (!state.pollInterval) {
+      state.pollInterval = setInterval(pollOnce, 30000);
+    }
+  }
+
+  function stopPolling() {
+    if (state.pollInterval) {
+      clearInterval(state.pollInterval);
+      state.pollInterval = null;
+    }
+  }
+
+  function handleVisibility() {
+    if (document.hidden) {
+      stopPolling();
+    } else {
+      pollOnce(); // Immediate refresh when tab becomes visible
+      startPolling();
+    }
+  }
+
+  document.addEventListener('visibilitychange', handleVisibility);
+  startPolling();
 
   // Return cleanup function
   return () => {
-    if (state.pollInterval) clearInterval(state.pollInterval);
+    stopPolling();
+    document.removeEventListener('visibilitychange', handleVisibility);
     container.removeEventListener('click', handleClick);
     container.removeEventListener('change', handleChange);
+    container.removeEventListener('blur', handleBlur, true);
+    container.removeEventListener('keydown', handleKeydown);
   };
 }

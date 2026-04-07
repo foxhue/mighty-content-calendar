@@ -119,7 +119,11 @@ BEGIN
     ('2026-03-31-0', mighty_id, '2026-03', 'Pau',    'Tuesday',   'W5', '2026-03-31', 0, 'Video',             'TBC',                                                                     'draft',          '{}');
 END $$;
 
--- 6. Drop the old approved column (now replaced by status)
+-- 6. Add indexes for common query patterns
+CREATE INDEX idx_approvals_workspace_month ON calendar_approvals(workspace_id, month);
+CREATE INDEX idx_approvals_workspace_status ON calendar_approvals(workspace_id, status);
+
+-- 7. Drop the old approved column (now replaced by status)
 -- Run this AFTER verifying the migration worked:
 -- ALTER TABLE calendar_approvals DROP COLUMN approved;
 

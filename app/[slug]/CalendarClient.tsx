@@ -2,11 +2,13 @@
 
 import { useRef, useEffect } from 'react';
 import type { WorkspaceConfig, CalendarApprovalRow } from '@/lib/types';
-import { getCalendarCSS } from '@/lib/calendar-styles';
 import { initCalendar } from '@/lib/calendar';
 
+// Config without sensitive fields (reviewToken, clientEmail stripped server-side)
+type SafeConfig = Omit<WorkspaceConfig, 'reviewToken' | 'clientEmail'>;
+
 interface Props {
-  config: WorkspaceConfig;
+  config: SafeConfig;
   initialData: CalendarApprovalRow[];
 }
 
@@ -17,17 +19,15 @@ export default function CalendarClient({ config, initialData }: Props) {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Inject CSS
-    const style = document.createElement('style');
-    style.textContent = getCalendarCSS(config);
-    document.head.appendChild(style);
-
-    // Initialize calendar
-    cleanupRef.current = initCalendar(containerRef.current, config, initialData);
+    // CSS is injected server-side via <style> in page.tsx — no client injection needed
+    cleanupRef.current = initCalendar(
+      containerRef.current,
+      config as WorkspaceConfig,
+      initialData
+    );
 
     return () => {
       if (cleanupRef.current) cleanupRef.current();
-      style.remove();
     };
   }, [config, initialData]);
 
